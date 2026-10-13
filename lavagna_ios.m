@@ -1,13 +1,8 @@
 #import <UIKit/UIKit.h>
-#import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 
 #include <math.h>
-#include <stdio.h>
-#include <string.h>
 
 #import "lavagna_metal.h"
-
-#include "lavagna_image.h"
 
 enum {
     ZOOM_UNIT = 1000,
@@ -98,139 +93,8 @@ void lav_set_title(lavagna *lv, const char *title) {
     window_of(lv).windowScene.title = @(title);
 }
 
-void lav_set_edited(lavagna *lv, int edited) {
-    (void)lv;
-    (void)edited;
-}
-
 void lav_cursor(lavagna *lv, lav_cursor_kind kind) {
     lv->cursor = kind;
-}
-
-int lav_clipboard_set_image(lavagna *lv, const uint32_t *pixels, int32_t w, int32_t h) {
-    (void)lv;
-    CGImageRef img = lavagna_create_cgimage(pixels, w, h);
-    if (img == NULL) {
-        return 0;
-    }
-    UIPasteboard.generalPasteboard.image = [UIImage imageWithCGImage:img];
-    CGImageRelease(img);
-    return 1;
-}
-
-int lav_clipboard_get_image(lavagna *lv, uint32_t *dst, size_t cap, int32_t *w, int32_t *h) {
-    (void)lv;
-    UIImage *img = UIPasteboard.generalPasteboard.image;
-    if (img == nil || img.CGImage == NULL) {
-        return 0;
-    }
-    return lavagna_pixels_of(img.CGImage, dst, cap, w, h);
-}
-
-static void panel_done(lavagna *lv, uint32_t id, NSURL *url) {
-    lv->panel_path[0] = '\0';
-    uint8_t chosen = 0;
-    if (url != nil && strlen(url.fileSystemRepresentation) < PATH_CAP) {
-        lavagna_copy_text(lv->panel_path, PATH_CAP, url.fileSystemRepresentation);
-        chosen = 1;
-    }
-    lavagna_push(lv, (lav_event){
-                         .type = LAV_EV_PANEL,
-                         .time_ns = lavagna_now_ns(),
-                         .button = chosen,
-                         .id = id,
-                     });
-}
-
-@interface LavPicker : NSObject <UIDocumentPickerDelegate>
-@property(nonatomic) uint32_t panelId;
-@end
-
-@implementation LavPicker
-
-- (void)documentPicker:(UIDocumentPickerViewController *)c didPickDocumentsAtURLs:(NSArray *)urls {
-    (void)c;
-    panel_done(&the_lv, self.panelId, urls.firstObject);
-}
-
-- (void)documentPickerWasCancelled:(UIDocumentPickerViewController *)c {
-    (void)c;
-    panel_done(&the_lv, self.panelId, nil);
-}
-
-@end
-
-static LavPicker *picker;
-
-/* A copy of the file chosen lands in the app's own space: what the program
-   reads. */
-void lav_open_panel(lavagna *lv, uint32_t id, const char *extension) {
-    if (lv->replay != NULL) {
-        return;
-    }
-    UTType *type = [UTType typeWithFilenameExtension:@(extension)];
-    UIDocumentPickerViewController *p =
-        [[UIDocumentPickerViewController alloc] initForOpeningContentTypes:@[ type ] asCopy:YES];
-    picker = [LavPicker new];
-    picker.panelId = id;
-    p.delegate = picker;
-    [window_of(lv).rootViewController presentViewController:p animated:YES completion:nil];
-}
-
-/* yagni: the file goes to the app's Documents (Files > On My iPad) under the
-   name given; choosing a folder, iCloud Drive's included, waits for the
-   iCloud flow to be decided. */
-void lav_save_panel(lavagna *lv, uint32_t id, const char *extension, const char *name) {
-    (void)extension;
-    if (lv->replay != NULL) {
-        return;
-    }
-    NSURL *docs = [NSFileManager.defaultManager URLsForDirectory:NSDocumentDirectory
-                                                       inDomains:NSUserDomainMask]
-                      .firstObject;
-    panel_done(lv, id, [docs URLByAppendingPathComponent:@(name != NULL ? name : "untitled")]);
-}
-
-void lav_alert(lavagna *lv, uint32_t id, const char *title, const char *message,
-               const char *const *buttons, uint32_t nbuttons, const char *text) {
-    if (lv->replay != NULL) {
-        return;
-    }
-    UIAlertController *a =
-        [UIAlertController alertControllerWithTitle:@(title)
-                                            message:message != NULL ? @(message) : nil
-                                     preferredStyle:UIAlertControllerStyleAlert];
-    if (text != NULL) {
-        [a addTextFieldWithConfigurationHandler:^(UITextField *field) {
-          field.text = @(text);
-        }];
-    }
-    __weak UIAlertController *weak = a;
-    for (uint32_t i = 0; i < nbuttons && i < ALERT_BUTTONS_MAX; i++) {
-        uint8_t b = (uint8_t)i;
-        UIAlertAction *act = [UIAlertAction
-            actionWithTitle:@(buttons[i])
-                      style:UIAlertActionStyleDefault
-                    handler:^(UIAlertAction *action) {
-                      (void)action;
-                      lv->alert_text[0] = '\0';
-                      if (weak.textFields.count > 0) {
-                          lavagna_copy_text(lv->alert_text, TEXT_CAP,
-                                            weak.textFields.firstObject.text.UTF8String);
-                      }
-                      lavagna_push(lv, (lav_event){
-                                           .type = LAV_EV_ALERT,
-                                           .time_ns = lavagna_now_ns(),
-                                           .button = b,
-                                           .id = id,
-                                       });
-                    }];
-        [a addAction:act];
-        if (i == 0) {
-            a.preferredAction = act;
-        }
-    }
-    [window_of(lv).rootViewController presentViewController:a animated:YES completion:nil];
 }
 
 @interface LavView : UIView
@@ -463,14 +327,6 @@ void lav_alert(lavagna *lv, uint32_t id, const char *title, const char *message,
     [self presses:presses type:LAV_EV_KEY_UP];
 }
 
-- (void)menuItem:(UICommand *)command {
-    lavagna_push(_lv, (lav_event){
-                          .type = LAV_EV_MENU,
-                          .time_ns = lavagna_now_ns(),
-                          .id = (uint32_t)[command.propertyList unsignedIntValue],
-                      });
-}
-
 @end
 
 @interface LavController : UIViewController
@@ -488,24 +344,6 @@ void lav_alert(lavagna *lv, uint32_t id, const char *title, const char *message,
 
 @end
 
-/* A file another app hands over may live outside the sandbox: the program
-   gets a copy it can read. */
-static void open_url(NSURL *url) {
-    BOOL scoped = [url startAccessingSecurityScopedResource];
-    NSURL *copy = [NSURL fileURLWithPath:[NSTemporaryDirectory()
-                                             stringByAppendingPathComponent:url.lastPathComponent]];
-    [NSFileManager.defaultManager removeItemAtURL:copy error:nil];
-    BOOL ok = [NSFileManager.defaultManager copyItemAtURL:url toURL:copy error:nil];
-    if (scoped) {
-        [url stopAccessingSecurityScopedResource];
-    }
-    if (!ok || strlen(copy.fileSystemRepresentation) >= PATH_CAP) {
-        return;
-    }
-    lavagna_copy_text(the_lv.panel_path, PATH_CAP, copy.fileSystemRepresentation);
-    lavagna_push(&the_lv, (lav_event){.type = LAV_EV_OPEN, .time_ns = lavagna_now_ns()});
-}
-
 @interface LavSceneDelegate : UIResponder <UIWindowSceneDelegate>
 @property(nonatomic, strong) UIWindow *window;
 @end
@@ -516,6 +354,7 @@ static void open_url(NSURL *url) {
     willConnectToSession:(UISceneSession *)session
                  options:(UISceneConnectionOptions *)options {
     (void)session;
+    (void)options;
     UIWindowScene *ws = (UIWindowScene *)scene;
     self.window = [[UIWindow alloc] initWithWindowScene:ws];
     LavController *c = [LavController new];
@@ -524,14 +363,6 @@ static void open_url(NSURL *url) {
     the_lv.window = (__bridge void *)self.window;
     ws.title = @(the_lv.cfg.title);
     [self.window makeKeyAndVisible];
-    if (options.URLContexts.count > 0) {
-        open_url(options.URLContexts.anyObject.URL);
-    }
-}
-
-- (void)scene:(UIScene *)scene openURLContexts:(NSSet<UIOpenURLContext *> *)contexts {
-    (void)scene;
-    open_url(contexts.anyObject.URL);
 }
 
 /* One frame runs now, so the program saves before iOS may end it. */
@@ -548,17 +379,8 @@ static void open_url(NSURL *url) {
 
 @implementation LavAppDelegate
 
-static UIKeyModifierFlags flags_of(uint32_t mods) {
-    UIKeyModifierFlags f = 0;
-    f |= (mods & LAV_MOD_SHIFT) != 0 ? UIKeyModifierShift : 0;
-    f |= (mods & LAV_MOD_CTRL) != 0 ? UIKeyModifierControl : 0;
-    f |= (mods & LAV_MOD_ALT) != 0 ? UIKeyModifierAlternate : 0;
-    f |= (mods & LAV_MOD_CMD) != 0 ? UIKeyModifierCommand : 0;
-    return f;
-}
-
-/* The program's menus replace the system's File, Edit, Format and View in
-   the iPadOS menu bar; their shortcuts become key commands. */
+/* A game has nothing for the system's File, Edit, Format and View menus in
+   the iPadOS menu bar. */
 - (void)buildMenuWithBuilder:(id<UIMenuBuilder>)builder {
     if (builder.system != UIMenuSystem.mainSystem) {
         return;
@@ -567,54 +389,6 @@ static UIKeyModifierFlags flags_of(uint32_t mods) {
     [builder removeMenuForIdentifier:UIMenuEdit];
     [builder removeMenuForIdentifier:UIMenuFormat];
     [builder removeMenuForIdentifier:UIMenuView];
-    const lav_config *cfg = &the_lv.cfg;
-    UIMenuIdentifier after = UIMenuApplication;
-    uint32_t i = 0;
-    while (i < cfg->menu_len) {
-        const char *top = cfg->menu[i].menu;
-        NSMutableArray *items = [NSMutableArray array];
-        NSMutableArray *group = [NSMutableArray array];
-        for (; i < cfg->menu_len && strcmp(cfg->menu[i].menu, top) == 0; i++) {
-            const lav_menu_item *m = &cfg->menu[i];
-            if (m->title == NULL) {
-                [items addObject:[UIMenu menuWithTitle:@""
-                                                 image:nil
-                                            identifier:nil
-                                               options:UIMenuOptionsDisplayInline
-                                              children:group]];
-                group = [NSMutableArray array];
-                continue;
-            }
-            if (m->key != 0) {
-                unichar c = (unichar)m->key;
-                [group addObject:[UIKeyCommand commandWithTitle:@(m->title)
-                                                          image:nil
-                                                         action:@selector(menuItem:)
-                                                          input:[NSString stringWithCharacters:&c
-                                                                                        length:1]
-                                                  modifierFlags:flags_of(m->mods)
-                                                   propertyList:@(m->id)]];
-                continue;
-            }
-            [group addObject:[UICommand commandWithTitle:@(m->title)
-                                                   image:nil
-                                                  action:@selector(menuItem:)
-                                            propertyList:@(m->id)]];
-        }
-        [items addObject:[UIMenu menuWithTitle:@""
-                                         image:nil
-                                    identifier:nil
-                                       options:UIMenuOptionsDisplayInline
-                                      children:group]];
-        NSString *ident = [NSString stringWithFormat:@"lavagna.menu.%s", top];
-        UIMenu *menu = [UIMenu menuWithTitle:@(top)
-                                       image:nil
-                                  identifier:ident
-                                     options:0
-                                    children:items];
-        [builder insertSiblingMenu:menu afterMenuForIdentifier:after];
-        after = ident;
-    }
 }
 
 @end

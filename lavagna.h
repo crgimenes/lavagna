@@ -23,7 +23,6 @@ typedef enum {
     LAV_EV_POINTER_UP,
     LAV_EV_KEY_DOWN,
     LAV_EV_KEY_UP,
-    LAV_EV_MENU,
     /* Window close or Quit. Nothing closes until the program calls lav_quit. */
     LAV_EV_CLOSE,
     /* Scroll or two-finger pan: scroll_x and scroll_y in buffer pixels, the
@@ -33,19 +32,12 @@ typedef enum {
     /* Pinch: zoom in thousandths of a magnification step, positive to
        enlarge; x and y where the pointer is. */
     LAV_EV_PINCH,
-    /* A panel or alert closed: id as given; button 0 cancels a panel, or is
-       the index of the alert button chosen. */
-    LAV_EV_PANEL,
-    LAV_EV_ALERT,
     /* A touch that began as the pointer turned out to be a two-finger
        gesture: take back what its press started. */
     LAV_EV_POINTER_CANCEL,
     /* The app is going to the background, where iOS may end it without a
        word: save now. lav_frame runs at once for this event. */
     LAV_EV_SUSPEND,
-    /* A file given to the app from outside (the Finder, the Dock, Files):
-       its path is lav_path. */
-    LAV_EV_OPEN,
 } lav_event_type;
 
 typedef enum {
@@ -117,20 +109,10 @@ typedef struct {
     /* Key events. */
     uint8_t repeat;
     uint32_t key;
-    /* LAV_EV_MENU, LAV_EV_PANEL, LAV_EV_ALERT. */
-    uint32_t id;
     int32_t scroll_x;
     int32_t scroll_y;
     int32_t zoom;
 } lav_event;
-
-typedef struct {
-    const char *menu;  /* top-level menu title; items group by first appearance */
-    const char *title; /* NULL draws a separator */
-    uint32_t key;      /* key equivalent as a lowercase character, 0 for none */
-    uint32_t mods;
-    uint32_t id;
-} lav_menu_item;
 
 typedef struct {
     const char *title;
@@ -141,8 +123,6 @@ typedef struct {
     int32_t height;
     /* Initial window size, in buffer pixels times this. */
     int32_t scale;
-    const lav_menu_item *menu;
-    uint32_t menu_len;
     void *user;
 } lav_config;
 
@@ -164,8 +144,6 @@ lav_buffer lav_pixels(lavagna *lv);
 void lav_dirty(lavagna *lv, int32_t x, int32_t y, int32_t width, int32_t height);
 uint64_t lav_time_ns(const lavagna *lv);
 void lav_set_title(lavagna *lv, const char *title);
-/* The dot in the close button: unsaved changes. */
-void lav_set_edited(lavagna *lv, int edited);
 /* Device pixels per point of the window's screen: 1, 2 or 3. */
 int32_t lav_device_scale(const lavagna *lv);
 void lav_quit(lavagna *lv);
@@ -184,26 +162,5 @@ void lav_cursor(lavagna *lv, lav_cursor_kind kind);
    lav_file_write replaces the file only once the new bytes are on disk. */
 int64_t lav_file_read(lavagna *lv, const char *path, uint8_t *dst, size_t cap);
 int lav_file_write(lavagna *lv, const char *path, const uint8_t *data, size_t len);
-
-/* Native open and save panels for files with that extension (no dot). They
-   answer with LAV_EV_PANEL; lav_path holds the path chosen, or the one
-   LAV_EV_OPEN brought, until the next. */
-void lav_open_panel(lavagna *lv, uint32_t id, const char *extension);
-void lav_save_panel(lavagna *lv, uint32_t id, const char *extension, const char *name);
-const char *lav_path(const lavagna *lv);
-
-/* A native alert with up to three buttons, the first the default, and a
-   text field when text is not NULL (its initial value). It answers with
-   LAV_EV_ALERT; lav_alert_text holds what was typed until the next alert. */
-void lav_alert(lavagna *lv, uint32_t id, const char *title, const char *message,
-               const char *const *buttons, uint32_t nbuttons, const char *text);
-const char *lav_alert_text(const lavagna *lv);
-
-/* The system clipboard as an image, pixels 0xAARRGGBB with straight alpha.
-   Get returns 1 with the size in w and h when the clipboard holds an image
-   that fits in cap pixels, -1 with its size when it holds a larger one, 0
-   when it holds none. */
-int lav_clipboard_set_image(lavagna *lv, const uint32_t *pixels, int32_t w, int32_t h);
-int lav_clipboard_get_image(lavagna *lv, uint32_t *dst, size_t cap, int32_t *w, int32_t *h);
 
 #endif

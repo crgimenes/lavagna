@@ -2,7 +2,6 @@
 #include "../lavagna.h"
 
 enum {
-    MENU_CLEAR = 1,
     RADIUS_MAX = 6,
 };
 
@@ -15,15 +14,9 @@ typedef struct {
     int32_t y;
 } scribble;
 
-static const lav_menu_item menu[] = {
-    {"Image", "Clear", 'k', LAV_MOD_CMD, MENU_CLEAR},
-};
-
 void lav_setup(lav_config *cfg) {
     static scribble s;
     cfg->title = "scribble";
-    cfg->menu = menu;
-    cfg->menu_len = sizeof menu / sizeof menu[0];
     cfg->user = &s;
 }
 
@@ -107,8 +100,8 @@ void lav_frame(lavagna *lv, void *user) {
         case LAV_EV_POINTER_UP:
             s->down = 0;
             break;
-        case LAV_EV_MENU:
-            if (ev.id == MENU_CLEAR) {
+        case LAV_EV_KEY_DOWN:
+            if (ev.key == LAV_KEY_ESCAPE) {
                 clear(lv);
             }
             break;

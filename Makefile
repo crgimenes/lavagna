@@ -6,18 +6,16 @@ WARN = -Wall -Wextra -Werror -Wshadow -Wconversion -Wdouble-promotion -Wundef
 MACOS_MIN = 14.0
 CFLAGS ?= -std=c11 -O2 $(WARN) -mmacosx-version-min=$(MACOS_MIN)
 OBJCFLAGS = -fobjc-arc -O2 $(WARN) -mmacosx-version-min=$(MACOS_MIN)
-FRAMEWORKS = -framework Cocoa -framework Metal -framework QuartzCore -framework UniformTypeIdentifiers
+FRAMEWORKS = -framework Cocoa -framework Metal -framework QuartzCore
 EXAMPLES = scribble pixels
-COMMON = lavagna.h lavagna_core.h lavagna_metal.h lavagna_image.h
-MACOS_OBJ = build/macos/lavagna_core.o build/macos/lavagna_apple.o build/macos/lavagna_image.o \
-	build/macos/lavagna_metal.o \
+COMMON = lavagna.h lavagna_core.h lavagna_metal.h
+MACOS_OBJ = build/macos/lavagna_core.o build/macos/lavagna_apple.o build/macos/lavagna_metal.o \
 	build/macos/lavagna_macos.o
 IOS_MIN = 17.0
 SIM_SDK = $(shell xcrun --sdk iphonesimulator --show-sdk-path)
 SIM = -target arm64-apple-ios$(IOS_MIN)-simulator -isysroot $(SIM_SDK)
-IOS_FRAMEWORKS = -framework UIKit -framework Foundation -framework CoreGraphics -framework Metal -framework QuartzCore -framework UniformTypeIdentifiers -lobjc
-SIM_OBJ = build/ios-sim/lavagna_core.o build/ios-sim/lavagna_apple.o build/ios-sim/lavagna_image.o \
-	build/ios-sim/lavagna_metal.o \
+IOS_FRAMEWORKS = -framework UIKit -framework Foundation -framework CoreGraphics -framework Metal -framework QuartzCore -lobjc
+SIM_OBJ = build/ios-sim/lavagna_core.o build/ios-sim/lavagna_apple.o build/ios-sim/lavagna_metal.o \
 	build/ios-sim/lavagna_ios.o
 TIDY_CHECKS = bugprone-*,cert-*,clang-analyzer-*,readability-*,-readability-magic-numbers,-readability-function-cognitive-complexity,-readability-identifier-length,-readability-braces-around-statements,-bugprone-easily-swappable-parameters,-readability-else-after-return,-readability-math-missing-parentheses,-readability-uppercase-literal-suffix,-cert-err33-c,-clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling
 
@@ -74,7 +72,7 @@ build/ios-sim/liblavagna.a: $(SIM_OBJ)
 	ar rcs $@ $^
 
 # An iOS app bundle: the executable at its root, scenes in the Info.plist,
-# documents visible in Files, signed ad hoc for the simulator.
+# signed ad hoc for the simulator.
 build/ios-sim/%.app: examples/%.c lavagna.h build/ios-sim/liblavagna.a
 	@mkdir -p $@
 	$(CC) -std=c11 -O2 $(WARN) -ffreestanding $(SIM) -Wl,-dead_strip $(IOS_FRAMEWORKS) \
@@ -92,8 +90,6 @@ build/ios-sim/%.app: examples/%.c lavagna.h build/ios-sim/liblavagna.a
 		'<key>MinimumOSVersion</key><string>$(IOS_MIN)</string>' \
 		'<key>UIDeviceFamily</key><array><integer>1</integer><integer>2</integer></array>' \
 		'<key>UILaunchScreen</key><dict/>' \
-		'<key>UIFileSharingEnabled</key><true/>' \
-		'<key>LSSupportsOpeningDocumentsInPlace</key><true/>' \
 		'<key>UISupportedInterfaceOrientations</key><array><string>UIInterfaceOrientationPortrait</string><string>UIInterfaceOrientationLandscapeLeft</string><string>UIInterfaceOrientationLandscapeRight</string><string>UIInterfaceOrientationPortraitUpsideDown</string></array>' \
 		'<key>UIApplicationSceneManifest</key><dict>' \
 		'<key>UIApplicationSupportsMultipleScenes</key><false/>' \
@@ -134,14 +130,13 @@ fmt-check:
 
 tidy:
 	$(LLVM)/clang-tidy --quiet --warnings-as-errors='*' --checks='$(TIDY_CHECKS)' \
-		examples/*.c lavagna_core.c lavagna_apple.c lavagna_image.c -- -std=c11 -isysroot $(shell xcrun --show-sdk-path)
+		examples/*.c lavagna_core.c lavagna_apple.c -- -std=c11 -isysroot $(shell xcrun --show-sdk-path)
 	$(LLVM)/clang-tidy --quiet --warnings-as-errors='*' --checks='$(TIDY_CHECKS)' \
 		lavagna_wasm.c -- -std=c11 --target=wasm32 -ffreestanding
 
 check:
 	cppcheck --enable=warning,style,performance,portability --inline-suppr \
 		--suppress=missingIncludeSystem --error-exitcode=1 examples/*.c lavagna_core.c lavagna_apple.c \
-		lavagna_image.c \
 		lavagna_wasm.c
 
 # Programs build for a target with no C library at all.

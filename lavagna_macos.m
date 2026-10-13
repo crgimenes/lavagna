@@ -1,20 +1,14 @@
 #import <Cocoa/Cocoa.h>
-#import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 
 #include <math.h>
-#include <string.h>
 
 #import "lavagna_metal.h"
-
-#include "lavagna_image.h"
 
 enum {
     FOLLOW_W = 960,
     FOLLOW_H = 640,
     LINE_PX = 32,
     ZOOM_UNIT = 1000,
-    FIELD_W = 260,
-    FIELD_H = 24,
 };
 
 /* Indexed by macOS virtual key code (kVK_*). */
@@ -123,10 +117,6 @@ void lav_set_title(lavagna *lv, const char *title) {
     window_of(lv).title = @(title);
 }
 
-void lav_set_edited(lavagna *lv, int edited) {
-    window_of(lv).documentEdited = edited != 0;
-}
-
 static NSCursor *cursor_for(lav_cursor_kind k) {
     switch (k) {
     case LAV_CURSOR_CROSSHAIR:
@@ -148,118 +138,6 @@ void lav_cursor(lavagna *lv, lav_cursor_kind kind) {
     lv->cursor = kind;
     [cursor_for(kind) set];
     [window_of(lv) invalidateCursorRectsForView:window_of(lv).contentView];
-}
-
-/* PNG for the apps that read it, TIFF for the older ones. */
-int lav_clipboard_set_image(lavagna *lv, const uint32_t *pixels, int32_t w, int32_t h) {
-    (void)lv;
-    CGImageRef img = lavagna_create_cgimage(pixels, w, h);
-    if (img == NULL) {
-        return 0;
-    }
-    NSBitmapImageRep *rep = [[NSBitmapImageRep alloc] initWithCGImage:img];
-    CGImageRelease(img);
-    NSData *png = [rep representationUsingType:NSBitmapImageFileTypePNG properties:@{}];
-    NSPasteboard *pb = NSPasteboard.generalPasteboard;
-    [pb clearContents];
-    return [pb setData:png forType:NSPasteboardTypePNG] && [pb setData:rep.TIFFRepresentation
-                                                               forType:NSPasteboardTypeTIFF];
-}
-
-int lav_clipboard_get_image(lavagna *lv, uint32_t *dst, size_t cap, int32_t *w, int32_t *h) {
-    (void)lv;
-    NSPasteboard *pb = NSPasteboard.generalPasteboard;
-    NSData *data = [pb dataForType:NSPasteboardTypePNG];
-    if (data == nil) {
-        data = [pb dataForType:NSPasteboardTypeTIFF];
-    }
-    NSBitmapImageRep *rep = data != nil ? [NSBitmapImageRep imageRepWithData:data] : nil;
-    if (rep == nil || rep.CGImage == NULL) {
-        return 0;
-    }
-    return lavagna_pixels_of(rep.CGImage, dst, cap, w, h);
-}
-
-static void panel_done(lavagna *lv, uint32_t id, NSURL *url) {
-    lv->panel_path[0] = '\0';
-    uint8_t chosen = 0;
-    if (url != nil && strlen(url.fileSystemRepresentation) < PATH_CAP) {
-        lavagna_copy_text(lv->panel_path, PATH_CAP, url.fileSystemRepresentation);
-        chosen = 1;
-    }
-    lavagna_push(lv, (lav_event){
-                         .type = LAV_EV_PANEL,
-                         .time_ns = lavagna_now_ns(),
-                         .button = chosen,
-                         .id = id,
-                     });
-}
-
-void lav_open_panel(lavagna *lv, uint32_t id, const char *extension) {
-    if (lv->replay != NULL) {
-        return;
-    }
-    NSOpenPanel *p = [NSOpenPanel openPanel];
-    p.allowedContentTypes = @[ [UTType typeWithFilenameExtension:@(extension)] ];
-    p.canChooseDirectories = NO;
-    p.allowsMultipleSelection = NO;
-    [p beginSheetModalForWindow:window_of(lv)
-              completionHandler:^(NSModalResponse r) {
-                panel_done(lv, id, r == NSModalResponseOK ? p.URL : nil);
-              }];
-}
-
-void lav_save_panel(lavagna *lv, uint32_t id, const char *extension, const char *name) {
-    if (lv->replay != NULL) {
-        return;
-    }
-    NSSavePanel *p = [NSSavePanel savePanel];
-    p.allowedContentTypes = @[ [UTType typeWithFilenameExtension:@(extension)] ];
-    if (name != NULL) {
-        p.nameFieldStringValue = @(name);
-    }
-    [p beginSheetModalForWindow:window_of(lv)
-              completionHandler:^(NSModalResponse r) {
-                panel_done(lv, id, r == NSModalResponseOK ? p.URL : nil);
-              }];
-}
-
-void lav_alert(lavagna *lv, uint32_t id, const char *title, const char *message,
-               const char *const *buttons, uint32_t nbuttons, const char *text) {
-    if (lv->replay != NULL) {
-        return;
-    }
-    NSAlert *a = [NSAlert new];
-    a.messageText = @(title);
-    a.informativeText = message != NULL ? @(message) : @"";
-    for (uint32_t i = 0; i < nbuttons && i < ALERT_BUTTONS_MAX; i++) {
-        [a addButtonWithTitle:@(buttons[i])];
-    }
-    NSTextField *field = nil;
-    if (text != NULL) {
-        field = [[NSTextField alloc] initWithFrame:NSMakeRect(0, 0, FIELD_W, FIELD_H)];
-        field.stringValue = @(text);
-        a.accessoryView = field;
-        [a layout];
-        a.window.initialFirstResponder = field;
-    }
-    [a beginSheetModalForWindow:window_of(lv)
-              completionHandler:^(NSModalResponse r) {
-                lv->alert_text[0] = '\0';
-                if (field != nil) {
-                    lavagna_copy_text(lv->alert_text, TEXT_CAP, field.stringValue.UTF8String);
-                }
-                uint8_t b = 0;
-                if (r >= NSAlertFirstButtonReturn) {
-                    b = (uint8_t)(r - NSAlertFirstButtonReturn);
-                }
-                lavagna_push(lv, (lav_event){
-                                     .type = LAV_EV_ALERT,
-                                     .time_ns = lavagna_now_ns(),
-                                     .button = b,
-                                     .id = id,
-                                 });
-              }];
 }
 
 @interface LavView : NSView
@@ -500,27 +378,6 @@ void lav_alert(lavagna *lv, uint32_t id, const char *title, const char *message,
     return NO;
 }
 
-/* A file from the Finder or the Dock: the first one, since a lavagna has one
-   window. */
-- (void)application:(NSApplication *)app openURLs:(NSArray<NSURL *> *)urls {
-    (void)app;
-    NSURL *url = urls.firstObject;
-    if (url == nil || strlen(url.fileSystemRepresentation) >= PATH_CAP) {
-        return;
-    }
-    lavagna_copy_text(self.lv->panel_path, PATH_CAP, url.fileSystemRepresentation);
-    lavagna_push(self.lv, (lav_event){.type = LAV_EV_OPEN, .time_ns = lavagna_now_ns()});
-}
-
-- (void)menuItem:(NSMenuItem *)item {
-    lavagna_push(self.lv, (lav_event){
-                              .type = LAV_EV_MENU,
-                              .mods = self.lv->mods,
-                              .time_ns = lavagna_now_ns(),
-                              .id = (uint32_t)item.tag,
-                          });
-}
-
 @end
 
 static NSMenuItem *item(NSString *title, SEL action, NSString *key) {
@@ -528,17 +385,13 @@ static NSMenuItem *item(NSString *title, SEL action, NSString *key) {
 }
 
 static NSMenu *submenu(NSMenu *bar, NSString *title) {
-    NSMenuItem *top = [bar itemWithTitle:title];
-    if (top != nil) {
-        return top.submenu;
-    }
-    top = item(title, NULL, @"");
+    NSMenuItem *top = item(title, NULL, @"");
     top.submenu = [[NSMenu alloc] initWithTitle:title];
     [bar addItem:top];
     return top.submenu;
 }
 
-static void build_menu(const lav_config *cfg, LavDelegate *d) {
+static void build_menu(const lav_config *cfg) {
     NSString *name = @(cfg->title);
     NSMenu *bar = [NSMenu new];
     NSMenu *app = submenu(bar, name);
@@ -552,32 +405,6 @@ static void build_menu(const lav_config *cfg, LavDelegate *d) {
     [app addItem:item(@"Show All", @selector(unhideAllApplications:), @"")];
     [app addItem:[NSMenuItem separatorItem]];
     [app addItem:item([@"Quit " stringByAppendingString:name], @selector(terminate:), @"q")];
-
-    for (uint32_t i = 0; i < cfg->menu_len; i++) {
-        const lav_menu_item *m = &cfg->menu[i];
-        NSMenu *sub = submenu(bar, @(m->menu));
-        if (m->title == NULL) {
-            [sub addItem:[NSMenuItem separatorItem]];
-            continue;
-        }
-        NSString *key = @"";
-        if (m->key != 0) {
-            unichar c = (unichar)m->key;
-            key = [NSString stringWithCharacters:&c length:1];
-        }
-        NSMenuItem *it = item(@(m->title), @selector(menuItem:), key);
-        NSEventModifierFlags mask = 0;
-        for (size_t j = 0; j < sizeof modmap / sizeof modmap[0]; j++) {
-            if (m->mods & modmap[j].mod) {
-                mask |= modmap[j].flag;
-            }
-        }
-        it.keyEquivalentModifierMask = mask;
-        it.target = d;
-        it.tag = (NSInteger)m->id;
-        [sub addItem:it];
-    }
-
     NSMenu *win = submenu(bar, @"Window");
     [win addItem:item(@"Minimize", @selector(performMiniaturize:), @"m")];
     [win addItem:item(@"Zoom", @selector(performZoom:), @"")];
@@ -608,7 +435,7 @@ int main(void) {
         d = [LavDelegate new];
         d.lv = &lv;
         NSApp.delegate = d;
-        build_menu(&lv.cfg, d);
+        build_menu(&lv.cfg);
         [NSEvent setMouseCoalescingEnabled:NO];
 
         NSWindowStyleMask style = NSWindowStyleMaskTitled | NSWindowStyleMaskClosable |

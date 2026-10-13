@@ -5,11 +5,10 @@
 
 const LAV = {
   POINTER_DOWN: 2, POINTER_MOVE: 3, POINTER_UP: 4, KEY_DOWN: 5, KEY_UP: 6,
-  SCROLL: 9, PINCH: 10, PANEL: 11, ALERT: 12, POINTER_CANCEL: 13, SUSPEND: 14, OPEN: 15,
+  SCROLL: 8, PINCH: 9, POINTER_CANCEL: 10, SUSPEND: 11,
   MOD_SHIFT: 1, MOD_CTRL: 2, MOD_ALT: 4, MOD_CMD: 8,
   MOUSE: 0, PEN: 1, TOUCH: 2,
   PRESSURE_MAX: 65535,
-  TEXT_ALERT: 0, TEXT_PANEL: 1,
 };
 
 // KeyboardEvent.code to lavagna's physical keys, named by the US layout.
@@ -33,26 +32,16 @@ const KEYS = (() => {
 async function lavagna(url, canvas) {
   let ex = null;
   const dec = new TextDecoder();
-  const enc = new TextEncoder();
   const ctx = canvas.getContext("2d");
   const bytes = (p, n) => new Uint8Array(ex.memory.buffer, p, n);
   const str = (p) => {
-    if (p === 0) return null;
     const b = new Uint8Array(ex.memory.buffer, p);
     let n = 0;
     while (b[n] !== 0) n++;
     return dec.decode(b.subarray(0, n));
   };
-  const put = (which, s) => {
-    const cap = ex.text_capacity(which) - 1;
-    let b = enc.encode(s);
-    if (b.length > cap) b = b.subarray(0, cap);
-    const dst = bytes(ex.text_buffer(which), b.length + 1);
-    dst.set(b);
-    dst[b.length] = 0;
-  };
   const send = (type, o = {}) => ex.event(type, o.x | 0, o.y | 0, o.button | 0, o.pointer | 0,
-    o.pressure | 0, o.mods | 0, o.key | 0, o.sx | 0, o.sy | 0, o.zoom | 0, o.id | 0);
+    o.pressure | 0, o.mods | 0, o.key | 0, o.sx | 0, o.sy | 0, o.zoom | 0);
   const store = (path) => "lavagna:" + path;
 
   const imports = {
@@ -68,27 +57,6 @@ async function lavagna(url, canvas) {
       },
       title(p) { document.title = str(p); },
       cursor(k) { canvas.style.cursor = ["default", "crosshair", "grab", "grabbing"][k] || "default"; },
-      // window.prompt and confirm, after the frame: blocking inside one
-      // would stop the program mid-call.
-      alert(id, title, message, b0, b1, b2, n, text) {
-        const head = str(title) + (str(message) ? "\n\n" + str(message) : "");
-        const names = [str(b0), str(b1), str(b2)].slice(0, n);
-        const initial = str(text);
-        setTimeout(() => {
-          let button = 0;
-          if (initial !== null) {
-            const r = window.prompt(head, initial);
-            button = r === null ? Math.max(n - 1, 0) : 0;
-            put(LAV.TEXT_ALERT, r === null ? "" : r);
-          } else if (n >= 2) {
-            const ok = window.confirm(head + "\n\nOK: " + names[0] + "    Cancel: " + names[n - 1]);
-            button = ok ? 0 : n - 1;
-          } else {
-            window.alert(head);
-          }
-          send(LAV.ALERT, { button, id });
-        }, 0);
-      },
       file_read(path, dst, cap) {
         const v = localStorage.getItem(store(str(path)));
         if (v === null) return -1;
@@ -109,29 +77,6 @@ async function lavagna(url, canvas) {
         } catch (e) {
           return 0;
         }
-      },
-      // The file chosen is copied into localStorage under its name, which
-      // becomes the path the program reads.
-      open_panel(id, ext) {
-        const input = document.createElement("input");
-        input.type = "file";
-        input.accept = "." + str(ext);
-        input.onchange = async () => {
-          const f = input.files[0];
-          if (!f) {
-            send(LAV.PANEL, { button: 0, id });
-            return;
-          }
-          const b = new Uint8Array(await f.arrayBuffer());
-          let s = "";
-          for (let i = 0; i < b.length; i += 8192) {
-            s += String.fromCharCode.apply(null, b.subarray(i, Math.min(i + 8192, b.length)));
-          }
-          localStorage.setItem(store(f.name), s);
-          put(LAV.TEXT_PANEL, f.name);
-          send(LAV.PANEL, { button: 1, id });
-        };
-        input.click();
       },
     },
   };

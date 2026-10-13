@@ -11,24 +11,6 @@ void lavagna_push(lavagna *lv, lav_event ev) {
     lv->len++;
 }
 
-/* Copies a UTF-8 string, cut at a character boundary when it does not fit. */
-void lavagna_copy_text(char *dst, size_t cap, const char *src) {
-    size_t n = 0;
-    while (src[n] != '\0') {
-        n++;
-    }
-    if (n >= cap) {
-        n = cap - 1;
-        while (n > 0 && ((unsigned char)src[n] & 0xc0u) == 0x80u) {
-            n--;
-        }
-    }
-    for (size_t i = 0; i < n; i++) {
-        dst[i] = src[i];
-    }
-    dst[n] = '\0';
-}
-
 int lav_poll(lavagna *lv, lav_event *ev) {
     if (lv->len == 0) {
         return 0;
@@ -75,14 +57,6 @@ int32_t lav_device_scale(const lavagna *lv) {
 
 void lav_quit(lavagna *lv) {
     lv->quit = 1;
-}
-
-const char *lav_path(const lavagna *lv) {
-    return lv->panel_path;
-}
-
-const char *lav_alert_text(const lavagna *lv) {
-    return lv->alert_text;
 }
 
 int lavagna_layout(lavagna *lv, int32_t dw, int32_t dh) {

@@ -8,8 +8,6 @@
 
 enum {
     PAGE = 65536,
-    TEXT_ALERT = 0,
-    TEXT_PANEL = 1,
 };
 
 IMPORT("present")
@@ -17,12 +15,8 @@ void js_present(const uint8_t *rgba, int32_t w, int32_t h, int32_t x, int32_t y,
                 int32_t dh);
 IMPORT("title") void js_title(const char *title);
 IMPORT("cursor") void js_cursor(int32_t kind);
-IMPORT("alert")
-void js_alert(uint32_t id, const char *title, const char *message, const char *b0, const char *b1,
-              const char *b2, uint32_t nbuttons, const char *text);
 IMPORT("file_read") int32_t js_file_read(const char *path, uint8_t *dst, uint32_t cap);
 IMPORT("file_write") int32_t js_file_write(const char *path, const uint8_t *data, uint32_t len);
-IMPORT("open_panel") void js_open_panel(uint32_t id, const char *extension);
 
 /* wasm-ld defines it: where the heap starts. */
 // NOLINTNEXTLINE(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp)
@@ -102,11 +96,6 @@ void lav_set_title(lavagna *lv, const char *title) {
     js_title(title);
 }
 
-void lav_set_edited(lavagna *lv, int edited) {
-    (void)lv;
-    (void)edited;
-}
-
 void lav_cursor(lavagna *lv, lav_cursor_kind kind) {
     if (lv->cursor != kind) {
         lv->cursor = kind;
@@ -123,50 +112,6 @@ int64_t lav_file_read(lavagna *lv, const char *path, uint8_t *dst, size_t cap) {
 int lav_file_write(lavagna *lv, const char *path, const uint8_t *data, size_t len) {
     (void)lv;
     return js_file_write(path, data, (uint32_t)len);
-}
-
-/* yagni: the browser's clipboard is asynchronous and asks permission; until
-   a program needs it, there is none. */
-int lav_clipboard_set_image(lavagna *lv, const uint32_t *pixels, int32_t w, int32_t h) {
-    (void)lv;
-    (void)pixels;
-    (void)w;
-    (void)h;
-    return 0;
-}
-
-/* The signature is lavagna.h's: dst is written on the other platforms. */
-// NOLINTNEXTLINE(readability-non-const-parameter)
-int lav_clipboard_get_image(lavagna *lv, uint32_t *dst, size_t cap, int32_t *w, int32_t *h) {
-    (void)lv;
-    (void)dst;
-    (void)cap;
-    *w = 0;
-    *h = 0;
-    return 0;
-}
-
-void lav_open_panel(lavagna *lv, uint32_t id, const char *extension) {
-    (void)lv;
-    js_open_panel(id, extension);
-}
-
-/* yagni: no folder to choose in a browser; the name given is the path. */
-void lav_save_panel(lavagna *lv, uint32_t id, const char *extension, const char *name) {
-    (void)extension;
-    lavagna_copy_text(lv->panel_path, PATH_CAP, name != NULL ? name : "untitled");
-    lavagna_push(lv, (lav_event){.type = LAV_EV_PANEL, .time_ns = now, .button = 1, .id = id});
-}
-
-void lav_alert(lavagna *lv, uint32_t id, const char *title, const char *message,
-               const char *const *buttons, uint32_t nbuttons, const char *text) {
-    (void)lv;
-    const char *b[ALERT_BUTTONS_MAX] = {"OK", "", ""};
-    uint32_t n = nbuttons < ALERT_BUTTONS_MAX ? nbuttons : ALERT_BUTTONS_MAX;
-    for (uint32_t i = 0; i < n; i++) {
-        b[i] = buttons[i];
-    }
-    js_alert(id, title, message != NULL ? message : "", b[0], b[1], b[2], n, text);
 }
 
 EXPORT("setup") int32_t wasm_setup(void) {
@@ -212,8 +157,7 @@ EXPORT("resize") void wasm_resize(int32_t dw, int32_t dh, int32_t device_scale) 
 
 EXPORT("event")
 void wasm_event(int32_t type, int32_t x, int32_t y, int32_t button, int32_t pointer,
-                int32_t pressure, int32_t mods, int32_t key, int32_t sx, int32_t sy, int32_t zoom,
-                int32_t id) {
+                int32_t pressure, int32_t mods, int32_t key, int32_t sx, int32_t sy, int32_t zoom) {
     lavagna_push(&the_lv, (lav_event){
                               .type = (lav_event_type)type,
                               .mods = (uint32_t)mods,
@@ -224,20 +168,10 @@ void wasm_event(int32_t type, int32_t x, int32_t y, int32_t button, int32_t poin
                               .button = (uint8_t)button,
                               .pointer = (uint8_t)pointer,
                               .key = (uint32_t)key,
-                              .id = (uint32_t)id,
                               .scroll_x = sx,
                               .scroll_y = sy,
                               .zoom = zoom,
                           });
-}
-
-/* Where JavaScript writes an alert's text or a panel's path, NUL-ended. */
-EXPORT("text_buffer") char *wasm_text_buffer(int32_t which) {
-    return which == TEXT_PANEL ? the_lv.panel_path : the_lv.alert_text;
-}
-
-EXPORT("text_capacity") int32_t wasm_text_capacity(int32_t which) {
-    return which == TEXT_PANEL ? PATH_CAP : TEXT_CAP;
 }
 
 /* One frame at time ms; what changed goes to the canvas as RGBA. Returns 1

@@ -11,9 +11,7 @@ enum {
     EVENTS_MAX = 4096,
     SIDE_MAX = 16384,
     PATH_CAP = 4096,
-    TEXT_CAP = 1024,
     REPLAY_MAX = 1024 * 1024,
-    ALERT_BUTTONS_MAX = 3,
 };
 
 struct lavagna {
@@ -46,14 +44,11 @@ struct lavagna {
     char *replay_next; /* the next line to run */
     int replay_down;
     lav_cursor_kind cursor;
-    char panel_path[PATH_CAP];
-    char alert_text[TEXT_CAP];
     void *window; /* the platform's window, not retained */
 };
 
 /* lavagna_core.c */
 void lavagna_push(lavagna *lv, lav_event ev);
-void lavagna_copy_text(char *dst, size_t cap, const char *src);
 int lavagna_valid(const lav_config *cfg);
 /* A drawable of dw x dh device pixels: the buffer follows it or is placed
    on it. Returns 1 when the buffer was reallocated. */

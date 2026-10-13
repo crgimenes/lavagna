@@ -184,9 +184,8 @@ enum {
     LINE_CAP = PATH_CAP + 64,
 };
 
-/* A replay line split at spaces; raw keeps it whole for an alert's text. */
+/* A replay line split at spaces. */
 typedef struct {
-    char raw[LINE_CAP];
     char buf[LINE_CAP];
     char *word[WORDS_MAX];
     int n;
@@ -196,9 +195,8 @@ static void split(const char *src, size_t len, words *w) {
     if (len >= LINE_CAP) {
         len = LINE_CAP - 1;
     }
-    memcpy(w->raw, src, len);
-    w->raw[len] = '\0';
-    memcpy(w->buf, w->raw, len + 1);
+    memcpy(w->buf, src, len);
+    w->buf[len] = '\0';
     w->n = 0;
     char *p = w->buf;
     while (*p != '\0' && w->n < WORDS_MAX) {
@@ -248,22 +246,6 @@ static uint32_t mods_named(const words *w) {
     return m;
 }
 
-/* The raw text after the first n words. */
-static const char *after_words(const char *t, int n) {
-    for (int k = 0; k < n; k++) {
-        while (*t == ' ') {
-            t++;
-        }
-        while (*t != ' ' && *t != '\0') {
-            t++;
-        }
-    }
-    while (*t == ' ') {
-        t++;
-    }
-    return t;
-}
-
 static void replay_pointer(lavagna *lv, const words *w, lav_event ev) {
     if (!num(w, 2, &ev.x) || !num(w, 3, &ev.y)) {
         return;
@@ -299,8 +281,6 @@ static void replay_key(lavagna *lv, const words *w, lav_event ev, const char *ve
    Coordinates are buffer pixels. */
 static void replay_line(lavagna *lv, const words *w, int *quit) {
     const char *verb = w->word[1];
-    int32_t a = 0;
-    int32_t b = 0;
     lav_event ev = {.time_ns = lavagna_now_ns(), .mods = mods_named(w)};
     ev.type = pointer_verb(verb);
     if (ev.type != LAV_EV_NONE) {
@@ -308,22 +288,6 @@ static void replay_line(lavagna *lv, const words *w, int *quit) {
     } else if (strcmp(verb, "key") == 0 || strcmp(verb, "keydown") == 0 ||
                strcmp(verb, "keyup") == 0) {
         replay_key(lv, w, ev, verb);
-    } else if (strcmp(verb, "menu") == 0 && num(w, 2, &a)) {
-        ev.type = LAV_EV_MENU;
-        ev.id = (uint32_t)a;
-        lavagna_push(lv, ev);
-    } else if (strcmp(verb, "alert") == 0 && num(w, 2, &a) && num(w, 3, &b)) {
-        lavagna_copy_text(lv->alert_text, TEXT_CAP, after_words(w->raw, 4));
-        ev.type = LAV_EV_ALERT;
-        ev.id = (uint32_t)a;
-        ev.button = (uint8_t)b;
-        lavagna_push(lv, ev);
-    } else if (strcmp(verb, "panel") == 0 && num(w, 2, &a) && w->n >= 4) {
-        lavagna_copy_text(lv->panel_path, PATH_CAP, w->word[3]);
-        ev.type = LAV_EV_PANEL;
-        ev.id = (uint32_t)a;
-        ev.button = strcmp(w->word[3], "cancel") != 0;
-        lavagna_push(lv, ev);
     } else if (strcmp(verb, "scroll") == 0 && num(w, 2, &ev.scroll_x) && num(w, 3, &ev.scroll_y) &&
                num(w, 4, &ev.x) && num(w, 5, &ev.y)) {
         ev.type = LAV_EV_SCROLL;
@@ -331,10 +295,6 @@ static void replay_line(lavagna *lv, const words *w, int *quit) {
     } else if (strcmp(verb, "pinch") == 0 && num(w, 2, &ev.zoom) && num(w, 3, &ev.x) &&
                num(w, 4, &ev.y)) {
         ev.type = LAV_EV_PINCH;
-        lavagna_push(lv, ev);
-    } else if (strcmp(verb, "open") == 0 && w->n >= 3) {
-        lavagna_copy_text(lv->panel_path, PATH_CAP, w->word[2]);
-        ev.type = LAV_EV_OPEN;
         lavagna_push(lv, ev);
     } else if (strcmp(verb, "cancel") == 0) {
         ev.type = LAV_EV_POINTER_CANCEL;
