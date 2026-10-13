@@ -1,0 +1,8 @@
+build/
+*.o
+*.dSYM/
+.DS_Store
+# planning, kept local
+CLAUDE.md
+project.md
+TODO.md

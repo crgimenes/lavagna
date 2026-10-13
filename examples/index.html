@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>lavagna</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
+  #box { width: 100vw; height: 100vh; display: flex; align-items: center; justify-content: center; }
+  canvas { display: block; }
+</style>
+</head>
+<body>
+<div id="box"><canvas id="screen"></canvas></div>
+<script src="lavagna.js"></script>
+<script>
+  // index.html?p=pixels runs pixels.wasm; scribble by default.
+  const name = new URLSearchParams(location.search).get("p") || "scribble";
+  lavagna(name + ".wasm", document.getElementById("screen")).catch((e) => {
+    document.body.style.color = "#fff";
+    document.body.textContent = e.message;
+  });
+</script>
+</body>
+</html>
