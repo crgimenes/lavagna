@@ -1,0 +1,17 @@
+name: test
+
+on: [push, pull_request, workflow_dispatch]
+
+permissions:
+  contents: read
+
+jobs:
+  # The macOS library and apps, the iOS simulator's, the wasm examples, and
+  # the lint, with Homebrew's LLVM where the Makefile looks for it.
+  qa:
+    runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - run: brew install llvm cppcheck
+      - run: make qa ios
