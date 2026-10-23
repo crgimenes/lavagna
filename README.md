@@ -117,7 +117,8 @@ path. A hidden page sends `LAV_EV_SUSPEND`.
 | `make qa` | all of the above |
 
 clang-format, clang-tidy and the wasm32 build come from LLVM under
-`/opt/homebrew/opt/llvm/bin`; `LLVM=` points elsewhere.
+`/opt/homebrew/opt/llvm/bin`; `LLVM=` points elsewhere. The wasm32 link
+needs `wasm-ld` on the PATH, which Homebrew ships apart, in `lld`.
 
 ## License
 

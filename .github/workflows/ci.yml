@@ -13,5 +13,6 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
-      - run: brew install llvm cppcheck
+      # lld is its own formula: the wasm32 link needs its wasm-ld
+      - run: brew install llvm lld cppcheck
       - run: make qa ios
