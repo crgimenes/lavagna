@@ -1,5 +1,5 @@
 /* Pressure-sensitive scribble on a buffer that follows the window. */
-#include "../lavagna.h"
+#include "../src/lavagna.h"
 
 enum {
     RADIUS_MAX = 6,

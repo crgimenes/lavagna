@@ -8,7 +8,7 @@ CFLAGS ?= -std=c11 -O2 $(WARN) -mmacosx-version-min=$(MACOS_MIN)
 OBJCFLAGS = -fobjc-arc -O2 $(WARN) -mmacosx-version-min=$(MACOS_MIN)
 FRAMEWORKS = -framework Cocoa -framework Metal -framework QuartzCore
 EXAMPLES = scribble pixels
-COMMON = lavagna.h lavagna_core.h lavagna_metal.h
+COMMON = src/lavagna.h src/lavagna_core.h src/lavagna_metal.h
 MACOS_OBJ = build/macos/lavagna_core.o build/macos/lavagna_apple.o build/macos/lavagna_metal.o \
 	build/macos/lavagna_macos.o
 IOS_MIN = 17.0
@@ -25,11 +25,11 @@ all: lib $(EXAMPLES:%=build/%.app)
 
 lib: build/macos/liblavagna.a
 
-build/macos/%.o: %.c $(COMMON)
+build/macos/%.o: src/%.c $(COMMON)
 	@mkdir -p build/macos
 	$(CC) $(CFLAGS) -c -o $@ $<
 
-build/macos/%.o: %.m $(COMMON)
+build/macos/%.o: src/%.m $(COMMON)
 	@mkdir -p build/macos
 	$(CC) $(OBJCFLAGS) -c -o $@ $<
 
@@ -43,11 +43,11 @@ WASM = --target=wasm32 -std=c11 -O2 -ffreestanding -nostdlib -fno-builtin $(WARN
 # The examples for the browser: each .wasm beside lavagna.js and a page.
 wasm: $(EXAMPLES:%=build/wasm/%.wasm) build/wasm/lavagna.js build/wasm/index.html
 
-build/wasm/%.wasm: examples/%.c lavagna_core.c lavagna_wasm.c lavagna.h lavagna_core.h
+build/wasm/%.wasm: examples/%.c src/lavagna_core.c src/lavagna_wasm.c src/lavagna.h src/lavagna_core.h
 	@mkdir -p build/wasm
-	$(LLVM)/clang $(WASM) -o $@ $< lavagna_core.c lavagna_wasm.c
+	$(LLVM)/clang $(WASM) -o $@ $< src/lavagna_core.c src/lavagna_wasm.c
 
-build/wasm/lavagna.js: lavagna.js
+build/wasm/lavagna.js: src/lavagna.js
 	@mkdir -p build/wasm
 	cp $< $@
 
@@ -59,11 +59,11 @@ lib-ios-sim: build/ios-sim/liblavagna.a
 
 ios: $(EXAMPLES:%=build/ios-sim/%.app)
 
-build/ios-sim/%.o: %.c $(COMMON)
+build/ios-sim/%.o: src/%.c $(COMMON)
 	@mkdir -p build/ios-sim
 	$(CC) -std=c11 -O2 $(WARN) $(SIM) -c -o $@ $<
 
-build/ios-sim/%.o: %.m $(COMMON)
+build/ios-sim/%.o: src/%.m $(COMMON)
 	@mkdir -p build/ios-sim
 	$(CC) -fobjc-arc -O2 $(WARN) $(SIM) -c -o $@ $<
 
@@ -73,7 +73,7 @@ build/ios-sim/liblavagna.a: $(SIM_OBJ)
 
 # An iOS app bundle: the executable at its root, scenes in the Info.plist,
 # signed ad hoc for the simulator.
-build/ios-sim/%.app: examples/%.c lavagna.h build/ios-sim/liblavagna.a
+build/ios-sim/%.app: examples/%.c src/lavagna.h build/ios-sim/liblavagna.a
 	@mkdir -p $@
 	$(CC) -std=c11 -O2 $(WARN) -ffreestanding $(SIM) -Wl,-dead_strip $(IOS_FRAMEWORKS) \
 		-o $@/$* $< build/ios-sim/liblavagna.a
@@ -100,7 +100,7 @@ build/ios-sim/%.app: examples/%.c lavagna.h build/ios-sim/liblavagna.a
 		'</dict></plist>' > $@/Info.plist
 	codesign --force --sign - $@ 2>/dev/null
 
-build/%.o: examples/%.c lavagna.h
+build/%.o: examples/%.c src/lavagna.h
 	@mkdir -p build
 	$(CC) $(CFLAGS) -ffreestanding -c -o $@ $<
 
@@ -123,21 +123,21 @@ size: all
 	@for e in $(EXAMPLES); do ls -l build/$$e.app/Contents/MacOS/$$e; done
 
 fmt:
-	$(LLVM)/clang-format -i *.h *.c *.m examples/*.c
+	$(LLVM)/clang-format -i src/*.h src/*.c src/*.m examples/*.c
 
 fmt-check:
-	$(LLVM)/clang-format --dry-run --Werror *.h *.c *.m examples/*.c
+	$(LLVM)/clang-format --dry-run --Werror src/*.h src/*.c src/*.m examples/*.c
 
 tidy:
 	$(LLVM)/clang-tidy --quiet --warnings-as-errors='*' --checks='$(TIDY_CHECKS)' \
-		examples/*.c lavagna_core.c lavagna_apple.c -- -std=c11 -isysroot $(shell xcrun --show-sdk-path)
+		examples/*.c src/lavagna_core.c src/lavagna_apple.c -- -std=c11 -isysroot $(shell xcrun --show-sdk-path)
 	$(LLVM)/clang-tidy --quiet --warnings-as-errors='*' --checks='$(TIDY_CHECKS)' \
-		lavagna_wasm.c -- -std=c11 --target=wasm32 -ffreestanding
+		src/lavagna_wasm.c -- -std=c11 --target=wasm32 -ffreestanding
 
 check:
 	cppcheck --enable=warning,style,performance,portability --inline-suppr \
-		--suppress=missingIncludeSystem --error-exitcode=1 examples/*.c lavagna_core.c lavagna_apple.c \
-		lavagna_wasm.c
+		--suppress=missingIncludeSystem --error-exitcode=1 examples/*.c src/lavagna_core.c src/lavagna_apple.c \
+		src/lavagna_wasm.c
 
 # Programs build for a target with no C library at all.
 freestanding:
@@ -147,7 +147,7 @@ freestanding:
 			-std=c11 -O2 $(WARN) -o build/$${e}_wasm.o examples/$$e.c || exit 1; \
 	done
 	$(LLVM)/clang --target=wasm32 -ffreestanding -nostdlib -fno-builtin -c \
-		-std=c11 -O2 $(WARN) -o build/lavagna_core_wasm.o lavagna_core.c
+		-std=c11 -O2 $(WARN) -o build/lavagna_core_wasm.o src/lavagna_core.c
 
 qa: all wasm fmt-check tidy check freestanding
 

@@ -1,5 +1,5 @@
 /* A 1-pixel pencil on a fixed 128x96 buffer shown at an integer scale. */
-#include "../lavagna.h"
+#include "../src/lavagna.h"
 
 enum {
     WIDTH = 128,
